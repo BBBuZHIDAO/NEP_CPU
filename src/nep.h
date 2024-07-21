@@ -16,6 +16,9 @@
 #pragma once
 #include <string>
 #include <vector>
+// TODO
+// #define FIX_MOLECULAR 1
+
 
 // #define USE_TABLE_FOR_RADIAL_FUNCTIONS
 
@@ -153,12 +156,15 @@ public:
   );
 
   void compute_for_lammps(
-    int nlocal,              // list->nlocal
+    int nlocal,              // atom->nlocal
     int inum,                // list->inum
     int* ilist,              // list->ilist
     int* numneigh,           // list->numneigh
     int** firstneigh,        // list->firstneigh
     int* type,               // atom->type
+#ifdef FIX_MOLECULAR
+    int* mol,                // atom->molecular
+#endif
     double** x,              // atom->x
     double& total_potential, // total potential energy for the current processor
     double total_virial[6],  // total virial for the current processor

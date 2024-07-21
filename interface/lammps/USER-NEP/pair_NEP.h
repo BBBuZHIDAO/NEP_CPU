@@ -26,6 +26,9 @@ PairStyle(nep, PairNEP)
 #include "pair.h"
 #include <string>
 
+// #define FIX_TYPE_LIST 1
+#define FIX_TYPE_LIST_BY_LAMMPS 1
+
 namespace LAMMPS_NS
 {
 class PairNEP : public Pair
@@ -33,6 +36,13 @@ class PairNEP : public Pair
 public:
   double cutoff;
   NEP3 nep_model;
+#ifdef FIX_TYPE_LIST
+  int *type_map;
+#endif
+#if defined(FIX_TYPE_LIST) || defined(FIX_TYPE_LIST_BY_LAMMPS)
+  int *type_list;
+  int type_list_allocated;
+#endif
   PairNEP(class LAMMPS*);
   virtual ~PairNEP();
   virtual void coeff(int, char**);

@@ -1588,6 +1588,9 @@ void find_descriptor_for_lammps(
   int** g_NL,
   int* g_type,
   double** g_pos,
+#ifdef FIX_MOLECULAR
+  int* mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
   const double* g_gn_radial,
   const double* g_gn_angular,
@@ -1608,7 +1611,11 @@ void find_descriptor_for_lammps(
         g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
 
       double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
-      if (d12sq >= paramb.rc_radial * paramb.rc_radial) {
+      if (d12sq >= paramb.rc_radial * paramb.rc_radial 
+#ifdef FIX_MOLECULAR
+      || mol[n1] != mol[n2]
+#endif
+      ) {
         continue;
       }
       double d12 = sqrt(d12sq);
@@ -1662,7 +1669,11 @@ void find_descriptor_for_lammps(
           g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
 
         double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
-        if (d12sq >= paramb.rc_angular * paramb.rc_angular) {
+        if (d12sq >= paramb.rc_angular * paramb.rc_angular
+#ifdef FIX_MOLECULAR
+        || mol[n1] != mol[n2]
+#endif
+        ) {
           continue;
         }
         double d12 = sqrt(d12sq);
@@ -1749,6 +1760,9 @@ void find_force_radial_for_lammps(
   int* g_type,
   double** g_pos,
   double* g_Fp,
+#ifdef FIX_MOLECULAR
+  int* mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
   const double* g_gnp_radial,
 #endif
@@ -1766,7 +1780,11 @@ void find_force_radial_for_lammps(
         g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
 
       double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
-      if (d12sq >= paramb.rc_radial * paramb.rc_radial) {
+      if (d12sq >= paramb.rc_radial * paramb.rc_radial
+#ifdef FIX_MOLECULAR
+      || mol[n1] != mol[n2]
+#endif
+      ) {
         continue;
       }
       double d12 = sqrt(d12sq);
@@ -1864,6 +1882,9 @@ void find_force_angular_for_lammps(
   double** g_pos,
   double* g_Fp,
   double* g_sum_fxyz,
+#ifdef FIX_MOLECULAR
+  int* mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
   const double* g_gn_angular,
   const double* g_gnp_angular,
@@ -1891,7 +1912,11 @@ void find_force_angular_for_lammps(
         g_pos[n2][0] - g_pos[n1][0], g_pos[n2][1] - g_pos[n1][1], g_pos[n2][2] - g_pos[n1][2]};
 
       double d12sq = r12[0] * r12[0] + r12[1] * r12[1] + r12[2] * r12[2];
-      if (d12sq >= paramb.rc_angular * paramb.rc_angular) {
+      if (d12sq >= paramb.rc_angular * paramb.rc_angular
+#ifdef FIX_MOLECULAR
+      || mol[n1] != mol[n2]
+#endif
+      ) {
         continue;
       }
       double d12 = sqrt(d12sq);
@@ -3251,6 +3276,9 @@ void NEP3::compute_for_lammps(
   int* NN,
   int** NL,
   int* type,
+#ifdef FIX_MOLECULAR
+    int* mol,                // atom->molecular
+#endif
   double** pos,
   double& total_potential,
   double total_virial[6],
@@ -3258,6 +3286,10 @@ void NEP3::compute_for_lammps(
   double** force,
   double** virial)
 {
+  // if (num_atoms < N) {
+  //   Fp.resize(N * annmb.dim);
+  //   sum_fxyz.resize(N * (paramb.n_max_angular + 1) * NUM_OF_ABC);
+  //   num_atoms = N;
   if (num_atoms < nlocal) {
     Fp.resize(nlocal * annmb.dim);
     sum_fxyz.resize(nlocal * (paramb.n_max_angular + 1) * NUM_OF_ABC);
@@ -3265,18 +3297,27 @@ void NEP3::compute_for_lammps(
   }
   find_descriptor_for_lammps(
     paramb, annmb, nlocal, N, ilist, NN, NL, type, pos,
+#ifdef FIX_MOLECULAR
+    mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
     gn_radial.data(), gn_angular.data(),
 #endif
     Fp.data(), sum_fxyz.data(), total_potential, potential);
   find_force_radial_for_lammps(
     paramb, annmb, nlocal, N, ilist, NN, NL, type, pos, Fp.data(),
+#ifdef FIX_MOLECULAR
+    mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
     gnp_radial.data(),
 #endif
     force, total_virial, virial);
   find_force_angular_for_lammps(
     paramb, annmb, nlocal, N, ilist, NN, NL, type, pos, Fp.data(), sum_fxyz.data(),
+#ifdef FIX_MOLECULAR
+    mol,
+#endif
 #ifdef USE_TABLE_FOR_RADIAL_FUNCTIONS
     gn_angular.data(), gnp_angular.data(),
 #endif
@@ -3371,9 +3412,6 @@ void NEP3::set_dftd3_para_all(
   valid = valid || set_dftd3_para_one(functional, "tpssh", 1.000, 0.4529, 2.2382, 4.6550);
   valid = valid || set_dftd3_para_one(functional, "b2kplyp", 0.64, 0.0000, 0.1521, 7.1916);
   valid = valid || set_dftd3_para_one(functional, "dsd-pbep86", 0.418, 0.0000, 0.0000, 5.6500);
-  valid = valid || set_dftd3_para_one(functional, "b97m", 1.0000, -0.0780, 0.1384, 5.5946);
-  valid = valid || set_dftd3_para_one(functional, "wb97x", 1.0000, 0.0000, 0.2641, 5.4959);
-  valid = valid || set_dftd3_para_one(functional, "wb97m", 1.0000, 0.5660, 0.3908, 3.1280);
 
   if (!valid) {
     std::cout << "The " << functional

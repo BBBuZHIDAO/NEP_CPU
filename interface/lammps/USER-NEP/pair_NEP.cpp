@@ -31,7 +31,7 @@
 #include <string.h>
 #include <vector>
 
-#define LAMMPS_VERSION_NUMBER 20220324 // use the new neighbor list starting from this version
+#define LAMMPS_VERSION_NUMBER 20231121 // use the new neighbor list starting from this version
 
 using namespace LAMMPS_NS;
 
@@ -47,9 +47,14 @@ PairNEP::PairNEP(LAMMPS* lmp) : Pair(lmp)
   manybody_flag = 1;
 
   single_enable = 0;
+  // TODO: TEST
+  one_coeff = 1;
 
   inited = false;
   allocated = 0;
+#if defined(FIX_TYPE_LIST) || defined(FIX_TYPE_LIST_BY_LAMMPS)
+  type_list_allocated = 0;
+#endif
 }
 
 PairNEP::~PairNEP()
@@ -60,6 +65,12 @@ PairNEP::~PairNEP()
   if (allocated) {
     memory->destroy(setflag);
     memory->destroy(cutsq);
+#ifdef FIX_TYPE_LIST
+    memory->destroy(type_map);
+#endif
+#if defined(FIX_TYPE_LIST) || defined(FIX_TYPE_LIST_BY_LAMMPS)
+    memory->destroy(type_list);
+#endif
   }
 }
 
@@ -74,6 +85,9 @@ void PairNEP::allocate()
 
   memory->create(cutsq, n + 1, n + 1, "pair:cutsq");
 
+#ifdef FIX_TYPE_LIST_BY_LAMMPS
+  map = new int[n + 1];
+#endif
   allocated = 1;
 }
 
@@ -81,14 +95,34 @@ void PairNEP::coeff(int narg, char** arg)
 {
   if (!allocated)
     allocate();
+#ifdef FIX_TYPE_LIST_BY_LAMMPS
+  // TODO
+  map_element2type(narg-3, arg+3);
+  model_filename = arg[2];
+#endif
+#ifdef FIX_TYPE_LIST
+  // create a type map to translate the LAMMPS index to GPUMD index
+  int ntype = atom->ntypes;
+  int arg_n = narg - 2;
+  if (ntype != arg_n)
+    error->all(FLERR, "wrong type number: DATA file: {}, IN file: {}", ntype, arg_n);
+  
+  memory->create(type_map, ntype + 1, "pair_nep:type_map");
+
+  for (int i = 0; i < ntype; ++i) {
+    type_map[i + 1] = atoi(arg[i + 2]);
+  }
+#endif
 }
 
 void PairNEP::settings(int narg, char** arg)
 {
+#ifndef FIX_TYPE_LIST_BY_LAMMPS
   if (narg != 1) {
     error->all(FLERR, "Illegal pair_style command; nep requires 1 parameter");
   }
   model_filename = arg[0];
+#endif
 }
 
 void PairNEP::init_style()
@@ -130,9 +164,62 @@ void PairNEP::compute(int eflag, int vflag)
     per_atom_virial = cvatom;
   }
 
+#ifdef FIX_TYPE_LIST
+  if (type_list_allocated == 0) {
+    // create a type list store GPUMD index
+    int atom_number = atom->nmax;
+  
+    type_list = nullptr;
+    memory->create(type_list, atom_number, "pair_nep:type_list");
+
+    int *raw_type = atom->type;
+  
+    for (int i = 0; i < atom_number; ++i) {
+      type_list[i] = type_map[raw_type[i]];
+    }
+
+    // change the flag to avoid allocated again
+    type_list_allocated = 0;
+  }
+
   nep_model.compute_for_lammps(
-   atom->nlocal, list->inum, list->ilist, list->numneigh, list->firstneigh, atom->type, atom->x, total_potential,
+    list->inum, list->ilist, list->numneigh, list->firstneigh, type_list,
+#ifdef FIX_MOLECULAR
+    atom->molecule,
+#endif
+    atom->x, total_potential,
     total_virial, per_atom_potential, atom->f, per_atom_virial);
+#elif defined(FIX_TYPE_LIST_BY_LAMMPS)
+  if (type_list_allocated == 0) {
+    // create a type list store GPUMD index
+    int atom_number = atom->nmax;
+  
+    type_list = nullptr;
+    memory->create(type_list, atom_number, "pair_nep:type_list");
+
+    int *raw_type = atom->type;
+  
+    for (int i = 0; i < atom_number; ++i) {
+      // TODO: should change NEP.cpp to avoid to add 1 here
+      type_list[i] = map[raw_type[i]] + 1;
+    }
+
+    // change the flag to avoid allocated again
+    type_list_allocated = 0;
+  }
+
+  nep_model.compute_for_lammps(
+    atom->nlocal, list->inum, list->ilist, list->numneigh, list->firstneigh, type_list, 
+#ifdef FIX_MOLECULAR
+    atom->molecule,
+#endif
+    atom->x, total_potential,
+    total_virial, per_atom_potential, atom->f, per_atom_virial);
+#else
+  nep_model.compute_for_lammps(
+    list->inum, list->ilist, list->numneigh, list->firstneigh, atom->type, atom->x, total_potential,
+    total_virial, per_atom_potential, atom->f, per_atom_virial);
+#endif
 
   if (eflag) {
     eng_vdwl += total_potential;
@@ -142,4 +229,7 @@ void PairNEP::compute(int eflag, int vflag)
       virial[component] += total_virial[component];
     }
   }
+#ifdef FIX_TYPE_LIST
+  memory->destroy(type_list);
+#endif
 }
