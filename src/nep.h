@@ -19,6 +19,7 @@
 // TODO
 // #define FIX_MOLECULAR 1
 
+#define FIX_TYPE_LIST_BY_LAMMPS 1
 
 // #define USE_TABLE_FOR_RADIAL_FUNCTIONS
 
@@ -164,6 +165,9 @@ public:
     int* type,               // atom->type
 #ifdef FIX_MOLECULAR
     int* mol,                // atom->molecular
+#endif
+#ifdef FIX_TYPE_LIST_BY_LAMMPS
+    int* type_map,           // map from atom type to element
 #endif
     double** x,              // atom->x
     double& total_potential, // total potential energy for the current processor

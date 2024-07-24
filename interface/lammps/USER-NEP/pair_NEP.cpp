@@ -23,7 +23,6 @@
 #include "neigh_list.h"
 #include "neigh_request.h"
 #include "neighbor.h"
-#include "nep.h"
 #include <fstream>
 #include <math.h>
 #include <stdio.h>
@@ -69,7 +68,8 @@ PairNEP::~PairNEP()
     memory->destroy(type_map);
 #endif
 #if defined(FIX_TYPE_LIST) || defined(FIX_TYPE_LIST_BY_LAMMPS)
-    memory->destroy(type_list);
+    // memory->destroy(type_list);
+    delete[] type_list;
 #endif
   }
 }
@@ -87,6 +87,7 @@ void PairNEP::allocate()
 
 #ifdef FIX_TYPE_LIST_BY_LAMMPS
   map = new int[n + 1];
+  type_list = new int[n + 1];
 #endif
   allocated = 1;
 }
@@ -99,6 +100,17 @@ void PairNEP::coeff(int narg, char** arg)
   // TODO
   map_element2type(narg-3, arg+3);
   model_filename = arg[2];
+
+  // get type map list
+//   if (type_list_allocated == 1) {
+//     memory->destroy(type_list);
+//   }
+  int ntype = atom->ntypes;
+  // memory->create(type_list, ntype + 1, "pair_nep:type_list");
+  for (int i = 0; i <= ntype; ++i) {
+    type_list[i] = map[i];
+  }
+  // type_list_allocated = 1;
 #endif
 #ifdef FIX_TYPE_LIST
   // create a type map to translate the LAMMPS index to GPUMD index
@@ -190,26 +202,27 @@ void PairNEP::compute(int eflag, int vflag)
     atom->x, total_potential,
     total_virial, per_atom_potential, atom->f, per_atom_virial);
 #elif defined(FIX_TYPE_LIST_BY_LAMMPS)
-  if (type_list_allocated == 0) {
-    // create a type list store GPUMD index
-    int atom_number = atom->nmax;
-  
-    type_list = nullptr;
-    memory->create(type_list, atom_number, "pair_nep:type_list");
-
-    int *raw_type = atom->type;
-  
-    for (int i = 0; i < atom_number; ++i) {
-      // TODO: should change NEP.cpp to avoid to add 1 here
-      type_list[i] = map[raw_type[i]] + 1;
-    }
-
-    // change the flag to avoid allocated again
-    type_list_allocated = 0;
-  }
+//   if (type_list_allocated == 0) {
+//     // create a type list store GPUMD index
+//     int atom_number = atom->nmax;
+//   
+//     type_list = nullptr;
+//     memory->create(type_list, atom_number, "pair_nep:type_list");
+// 
+//     int *raw_type = atom->type;
+//   
+//     for (int i = 0; i < atom_number; ++i) {
+//       // TODO: should change NEP.cpp to avoid to add 1 here
+//       type_list[i] = map[raw_type[i]] + 1;
+//     }
+// 
+//     // change the flag to avoid allocated again
+//     type_list_allocated = 0;
+//     printf("***** atom number[%d] *****\n", atom_number);
+//   }
 
   nep_model.compute_for_lammps(
-    atom->nlocal, list->inum, list->ilist, list->numneigh, list->firstneigh, type_list, 
+    atom->nlocal, list->inum, list->ilist, list->numneigh, list->firstneigh, atom->type, type_list, 
 #ifdef FIX_MOLECULAR
     atom->molecule,
 #endif

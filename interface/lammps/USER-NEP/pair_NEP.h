@@ -27,7 +27,6 @@ PairStyle(nep, PairNEP)
 #include <string>
 
 // #define FIX_TYPE_LIST 1
-#define FIX_TYPE_LIST_BY_LAMMPS 1
 
 namespace LAMMPS_NS
 {
